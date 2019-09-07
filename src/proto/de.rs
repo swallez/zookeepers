@@ -13,6 +13,33 @@ use super::MAX_LENGTH;
 use num_traits::ToPrimitive;
 use strum::IntoEnumIterator;
 
+use named_type::NamedType;
+
+/// A type discriminant in the ZK protocol, which has both strings and numeric values.
+pub trait OpCodeEnum {
+    fn codes_to_names() -> HashMap<i32, &'static str>;
+    fn names_to_codes() -> HashMap<&'static str, i32>;
+}
+
+impl <T, I> OpCodeEnum for T where
+    T: IntoEnumIterator<Iterator=I>,
+    I: Iterator<Item=T>,
+    T: ToPrimitive,
+    T: Into<&'static str>,
+{
+    fn codes_to_names() -> HashMap<i32, &'static str> {
+        T::iter().map(|v| (v.to_i32().expect("Cannot convert to i32"), v.into())).collect()
+    }
+
+    fn names_to_codes() -> HashMap<&'static str, i32> {
+        T::iter().map(|v| {
+            let i = v.to_i32().expect("Cannot convert to i32");
+            (v.into(), i)
+        }).collect()
+    }
+}
+
+
 pub struct Deserializer<'de, R: Read> {
     reader: &'de mut R,
 
@@ -30,7 +57,7 @@ pub fn from_reader<'de, R: Read>(reader: &'de mut R) -> Deserializer<'de, R> {
 impl<'de, 'a, R:Read> Deserializer<'de, R> {
 
     /// Add a discriminant mapping for struct enum types.
-    pub fn add_enum_mapping<E, I>(&mut self, enum_struct: &'static str) where
+    pub fn add_enum_mapping0<E, I>(&mut self, enum_struct: &'static str) where
         E: IntoEnumIterator<Iterator=I>,
         I: Iterator<Item=E>,
         E: ToPrimitive,
@@ -41,11 +68,17 @@ impl<'de, 'a, R:Read> Deserializer<'de, R> {
             E::iter().map(|v| (v.to_i32().expect(""), v.into())).collect()
         );
     }
+
+    pub fn add_enum_mapping<E: OpCodeEnum, T: NamedType>(&mut self) {
+        self.enum_mappings.insert(
+            T::short_type_name(),
+            E::codes_to_names()
+        );
+    }
 }
 
 impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<'de, R> {
     type Error = Error;
-
     fn deserialize_any<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value> {
         unimplemented!()
     }
@@ -200,9 +233,10 @@ impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<'de, R> {
     fn deserialize_enum<V: Visitor<'de>>(
         mut self,
         name: &'static str,
-        _variants: &'static [&'static str],
+        variants: &'static [&'static str],
         visitor: V
     ) -> Result<V::Value> {
+        println!("Variants for {}: {:?}", name, variants);
         visitor.visit_enum(JuteEnumAccess {enum_type: name, de: &mut self})
     }
 
@@ -327,7 +361,6 @@ pub mod test {
         _x: i32,
     }
 
-
     #[test]
     fn test_deser() {
         let data: Vec<u8> = vec![
@@ -354,22 +387,96 @@ pub mod test {
         assert_eq!(foo.z.get(&0xF), Some(&("abcd".to_owned())));
     }
 
+    //---------------------
+
+//    use std::collections::HashMap;
+//    use num_traits::cast::ToPrimitive;
+//    use strum::IntoEnumIterator;
+    use named_type_derive::*;
+    use named_type::NamedType;
+//
+//    /// A type discriminant in the ZK protocol, which has both strings and numeric values.
+//    trait OpCodeEnum {
+//        fn codes_to_names() -> HashMap<i32, &'static str>;
+//        fn names_to_codes() -> HashMap<&'static str, i32>;
+//    }
+//
+//    impl <T, I> OpCodeEnum for T where
+//        T: IntoEnumIterator<Iterator=I>,
+//        I: Iterator<Item=T>,
+//        T: ToPrimitive,
+//        T: Into<&'static str>,
+//    {
+//        fn codes_to_names() -> HashMap<i32, &'static str> {
+//            T::iter().map(|v| (v.to_i32().expect("Cannot convert to i32"), v.into())).collect()
+//        }
+//
+//        fn names_to_codes() -> HashMap<&'static str, i32> {
+//            T::iter().map(|v| {
+//                let i = v.to_i32().expect("Cannot convert to i32");
+//                (v.into(), i)
+//            }).collect()
+//        }
+//    }
+
+//    trait OpCodeStruct {
+//        fn opcode_to_variant<E: OpCodeEnum>() -> HashMap<i32, i32>;
+//        fn variant_to_opcode<E: OpCodeEnum>() -> Vec<i32>;
+//    }
+//
+//    impl <T, I> OpCodeStruct for T where
+//        T: IntoEnumIterator<Iterator=I>,
+//        I: Iterator<Item=T>,
+//        T: Into<&'static str>,
+//    {
+//        fn opcode_to_variant<E: OpCodeEnum>() -> HashMap<i32, i32> {
+//            let names_to_codes = E::names_to_codes();
+//
+//            Self::iter().enumerate().map(|(i, v)| {
+//                let name = v.into();
+//                let opcode = *names_to_codes.get(name.into())
+//                    .expect(&format!("Variant {} not found in opcodes", name));
+//                (opcode, i as i32)
+//            }).collect()
+//        }
+//
+//        fn variant_to_opcode<E: OpCodeEnum>() -> Vec<i32> {
+//            let names_to_codes = E::names_to_codes();
+//
+//            Self::iter().map(|v| {
+//                let name = v.into();
+//                let opcode = *names_to_codes.get(name)
+//                    .expect(&format!("Variant {} not found in opcodes", name));
+//                opcode
+//            }).collect()
+//        }
+//    }
+//
+//    fn register_mapping<T: OpCodeStruct, O: OpCodeEnum>() {
+//        let _x = T::opcode_to_variant::<O>();
+//        let _y = T::variant_to_opcode::<O>();
+//    }
+
     #[derive(Debug, PartialEq)]
-    #[derive(FromPrimitive, ToPrimitive)]
-    #[derive(EnumString, IntoStaticStr, EnumIter)]
+    #[derive(ToPrimitive)]
+    #[derive(IntoStaticStr, EnumIter)]
     enum FooBarCode {
         Foo = 3,
         Bar = 4,
     }
 
     #[derive(Deserialize, Debug, PartialEq)]
+//    #[derive(IntoStaticStr, EnumIter)]
+    #[derive(NamedType)]
     enum FooBar {
+//        #[serde(rename = "1")]
         Foo(i32),
         Bar(String)
     }
 
     #[test]
     fn test_enum() {
+
 
         let data: Vec<u8> = vec![
             0x00, 0x00, 0x00, 0x03, // Foo discriminant
@@ -378,7 +485,7 @@ pub mod test {
         let mut bytes = data.as_slice();
 
         let mut deser = crate::proto::de::from_reader(&mut bytes);
-        deser.add_enum_mapping::<FooBarCode, _>("FooBar");
+        deser.add_enum_mapping::<FooBarCode, FooBar>();
 
         let foobar = FooBar::deserialize(&mut deser).expect("fail");
         println!("FooBar = {:?}", foobar);
@@ -393,7 +500,7 @@ pub mod test {
         let mut bytes = data.as_slice();
 
         let mut deser = crate::proto::de::from_reader(&mut bytes);
-        deser.add_enum_mapping::<FooBarCode, _>("FooBar");
+        deser.add_enum_mapping::<FooBarCode, FooBar>();
         let foobar = FooBar::deserialize(&mut deser).expect("fail");
         println!("FooBar = {:?}", foobar);
 

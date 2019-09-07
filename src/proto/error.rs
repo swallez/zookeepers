@@ -54,7 +54,7 @@ impl Display for Error {
             Error::Message(ref msg) => f.write_str(msg),
             Error::TooLarge(size) => f.write_fmt(format_args!("too large: {}", size)),
             Error::NegativeValue => f.write_str("negative value"),
-            Error::Eof =>f.write_str("unexpected end of input"),
+            Error::Eof => f.write_str("unexpected end of input"),
         }
     }
 }
