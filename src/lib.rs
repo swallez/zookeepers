@@ -6,3 +6,4 @@ extern crate strum_macros;
 extern crate num_derive;
 
 pub mod proto;
+pub mod serde;

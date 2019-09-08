@@ -39,36 +39,23 @@ impl <T, I> OpCodeEnum for T where
     }
 }
 
-
-pub struct Deserializer<'de, R: Read> {
-    reader: &'de mut R,
+pub struct Deserializer<R> {
+    reader: R,
 
     /// Struct enum type -> (enum variant discriminant -> enum variant name)
     enum_mappings: HashMap<&'static str, HashMap<i32, &'static str>>,
 }
 
-pub fn from_reader<'de, R: Read>(reader: &'de mut R) -> Deserializer<'de, R> {
+pub fn from_reader<R: Read>(reader: R) -> Deserializer<R> {
     Deserializer{
         reader,
         enum_mappings: HashMap::new(),
     }
 }
 
-impl<'de, 'a, R:Read> Deserializer<'de, R> {
+impl<'de, R:Read> Deserializer<R> {
 
     /// Add a discriminant mapping for struct enum types.
-    pub fn add_enum_mapping0<E, I>(&mut self, enum_struct: &'static str) where
-        E: IntoEnumIterator<Iterator=I>,
-        I: Iterator<Item=E>,
-        E: ToPrimitive,
-        E: Into<&'static str>,
-    {
-        self.enum_mappings.insert(
-            enum_struct,
-            E::iter().map(|v| (v.to_i32().expect(""), v.into())).collect()
-        );
-    }
-
     pub fn add_enum_mapping<E: OpCodeEnum, T: NamedType>(&mut self) {
         self.enum_mappings.insert(
             T::short_type_name(),
@@ -77,7 +64,7 @@ impl<'de, 'a, R:Read> Deserializer<'de, R> {
     }
 }
 
-impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<'de, R> {
+impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<R> {
     type Error = Error;
     fn deserialize_any<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value> {
         unimplemented!()
@@ -106,20 +93,20 @@ impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<'de, R> {
         visitor.visit_i64(self.reader.read_i64::<BigEndian>()?)
     }
 
-    fn deserialize_u8<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value> {
-        unimplemented!()
+    fn deserialize_u8<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+        visitor.visit_u8(self.reader.read_u8()?)
     }
 
     fn deserialize_u16<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value> {
         unimplemented!()
     }
 
-    fn deserialize_u32<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value> {
-        unimplemented!()
+    fn deserialize_u32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+        visitor.visit_u32(self.reader.read_u32::<BigEndian>()?)
     }
 
-    fn deserialize_u64<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value> {
-        unimplemented!()
+    fn deserialize_u64<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+        visitor.visit_u64(self.reader.read_u64::<BigEndian>()?)
     }
 
     fn deserialize_f32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
@@ -150,14 +137,12 @@ impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<'de, R> {
 
     fn deserialize_string<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         let len = self.reader.read_u32::<BigEndian>()? as usize;
-
         if len > MAX_LENGTH {
             return Err(Error::TooLarge(len));
         }
 
         let mut chars = vec![0; len];
-        let buffer = chars.as_mut_slice();
-        self.reader.read_exact(buffer)?;
+        self.reader.read_exact(&mut chars)?;
 
         visitor.visit_string(String::from_utf8(chars)?)
     }
@@ -166,8 +151,14 @@ impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<'de, R> {
         unimplemented!()
     }
 
-    fn deserialize_byte_buf<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value> {
-        unimplemented!()
+    fn deserialize_byte_buf<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+        // Called for Vec<u8> fields with serde(with="serde_bytes")
+        let len = self.reader.read_u32::<BigEndian>()? as usize;
+
+        let mut bytes = vec![0; len];
+        self.reader.read_exact(&mut bytes)?;
+
+        visitor.visit_byte_buf(bytes)
     }
 
     fn deserialize_option<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value> {
@@ -233,10 +224,9 @@ impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<'de, R> {
     fn deserialize_enum<V: Visitor<'de>>(
         mut self,
         name: &'static str,
-        variants: &'static [&'static str],
+        _variants: &'static [&'static str],
         visitor: V
     ) -> Result<V::Value> {
-        println!("Variants for {}: {:?}", name, variants);
         visitor.visit_enum(JuteEnumAccess {enum_type: name, de: &mut self})
     }
 
@@ -249,13 +239,13 @@ impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<'de, R> {
     }
 }
 
-struct JuteAccess<'a, 'de: 'a, R: Read> {
-    de: &'a mut Deserializer<'de, R>,
+struct JuteAccess<'a, R: Read> {
+    de: &'a mut Deserializer<R>,
     size: usize,
 }
 
-impl <'a, 'de: 'a, R: Read> SeqAccess<'de> for JuteAccess<'a, 'de, R> {
-    type Error = super::Error;
+impl <'a, 'de: 'a, R: Read> SeqAccess<'de> for JuteAccess<'a, R> {
+    type Error = super::error::Error;
 
     fn next_element_seed<T: DeserializeSeed<'de>>(&mut self, seed: T) -> Result<Option<T::Value>> {
         if self.size <= 0 {
@@ -271,8 +261,8 @@ impl <'a, 'de: 'a, R: Read> SeqAccess<'de> for JuteAccess<'a, 'de, R> {
     }
 }
 
-impl <'a, 'de: 'a, R: Read> MapAccess<'de> for JuteAccess<'a, 'de, R> {
-    type Error = super::Error;
+impl <'a, 'de: 'a, R: Read> MapAccess<'de> for JuteAccess<'a, R> {
+    type Error = super::error::Error;
 
     fn next_key_seed<K: DeserializeSeed<'de>>(&mut self, seed: K) -> Result<Option<K::Value>>  {
         if self.size <= 0 {
@@ -291,13 +281,13 @@ impl <'a, 'de: 'a, R: Read> MapAccess<'de> for JuteAccess<'a, 'de, R> {
         Some(self.size)
     }
 }
-struct JuteEnumAccess<'a, 'de: 'a, R: Read> {
-    de: &'a mut Deserializer<'de, R>,
+struct JuteEnumAccess<'a, R: Read> {
+    de: &'a mut Deserializer<R>,
     enum_type: &'static str,
 }
 
-impl <'a, 'de: 'a, R: Read> EnumAccess<'de> for JuteEnumAccess<'a, 'de, R> {
-    type Error = super::Error;
+impl <'a, 'de: 'a, R: Read> EnumAccess<'de> for JuteEnumAccess<'a, R> {
+    type Error = super::error::Error;
     type Variant = Self;
 
     fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant)>
@@ -318,11 +308,11 @@ impl <'a, 'de: 'a, R: Read> EnumAccess<'de> for JuteEnumAccess<'a, 'de, R> {
     }
 }
 
-impl <'a, 'de: 'a, R: Read> VariantAccess<'de> for JuteEnumAccess<'a, 'de, R> {
-    type Error = super::Error;
+impl <'a, 'de: 'a, R: Read> VariantAccess<'de> for JuteEnumAccess<'a, R> {
+    type Error = super::error::Error;
 
     fn unit_variant(self) -> Result<()> {
-        unimplemented!()
+        Ok(())
     }
 
     fn newtype_variant_seed<T: DeserializeSeed<'de>>(self, seed: T) -> Result<T::Value> {
@@ -375,7 +365,7 @@ pub mod test {
         ];
         let mut bytes = data.as_slice();
 
-        let mut deser = crate::proto::de::from_reader(&mut bytes);
+        let mut deser = super::from_reader(&mut bytes);
 
         let foo = Foo::deserialize(&mut deser).expect("Failed to deserialize");
 
@@ -389,73 +379,8 @@ pub mod test {
 
     //---------------------
 
-//    use std::collections::HashMap;
-//    use num_traits::cast::ToPrimitive;
-//    use strum::IntoEnumIterator;
     use named_type_derive::*;
     use named_type::NamedType;
-//
-//    /// A type discriminant in the ZK protocol, which has both strings and numeric values.
-//    trait OpCodeEnum {
-//        fn codes_to_names() -> HashMap<i32, &'static str>;
-//        fn names_to_codes() -> HashMap<&'static str, i32>;
-//    }
-//
-//    impl <T, I> OpCodeEnum for T where
-//        T: IntoEnumIterator<Iterator=I>,
-//        I: Iterator<Item=T>,
-//        T: ToPrimitive,
-//        T: Into<&'static str>,
-//    {
-//        fn codes_to_names() -> HashMap<i32, &'static str> {
-//            T::iter().map(|v| (v.to_i32().expect("Cannot convert to i32"), v.into())).collect()
-//        }
-//
-//        fn names_to_codes() -> HashMap<&'static str, i32> {
-//            T::iter().map(|v| {
-//                let i = v.to_i32().expect("Cannot convert to i32");
-//                (v.into(), i)
-//            }).collect()
-//        }
-//    }
-
-//    trait OpCodeStruct {
-//        fn opcode_to_variant<E: OpCodeEnum>() -> HashMap<i32, i32>;
-//        fn variant_to_opcode<E: OpCodeEnum>() -> Vec<i32>;
-//    }
-//
-//    impl <T, I> OpCodeStruct for T where
-//        T: IntoEnumIterator<Iterator=I>,
-//        I: Iterator<Item=T>,
-//        T: Into<&'static str>,
-//    {
-//        fn opcode_to_variant<E: OpCodeEnum>() -> HashMap<i32, i32> {
-//            let names_to_codes = E::names_to_codes();
-//
-//            Self::iter().enumerate().map(|(i, v)| {
-//                let name = v.into();
-//                let opcode = *names_to_codes.get(name.into())
-//                    .expect(&format!("Variant {} not found in opcodes", name));
-//                (opcode, i as i32)
-//            }).collect()
-//        }
-//
-//        fn variant_to_opcode<E: OpCodeEnum>() -> Vec<i32> {
-//            let names_to_codes = E::names_to_codes();
-//
-//            Self::iter().map(|v| {
-//                let name = v.into();
-//                let opcode = *names_to_codes.get(name)
-//                    .expect(&format!("Variant {} not found in opcodes", name));
-//                opcode
-//            }).collect()
-//        }
-//    }
-//
-//    fn register_mapping<T: OpCodeStruct, O: OpCodeEnum>() {
-//        let _x = T::opcode_to_variant::<O>();
-//        let _y = T::variant_to_opcode::<O>();
-//    }
 
     #[derive(Debug, PartialEq)]
     #[derive(ToPrimitive)]
@@ -466,10 +391,8 @@ pub mod test {
     }
 
     #[derive(Deserialize, Debug, PartialEq)]
-//    #[derive(IntoStaticStr, EnumIter)]
     #[derive(NamedType)]
     enum FooBar {
-//        #[serde(rename = "1")]
         Foo(i32),
         Bar(String)
     }
@@ -484,7 +407,7 @@ pub mod test {
         ];
         let mut bytes = data.as_slice();
 
-        let mut deser = crate::proto::de::from_reader(&mut bytes);
+        let mut deser = super::from_reader(&mut bytes);
         deser.add_enum_mapping::<FooBarCode, FooBar>();
 
         let foobar = FooBar::deserialize(&mut deser).expect("fail");
@@ -499,7 +422,7 @@ pub mod test {
         ];
         let mut bytes = data.as_slice();
 
-        let mut deser = crate::proto::de::from_reader(&mut bytes);
+        let mut deser = super::from_reader(&mut bytes);
         deser.add_enum_mapping::<FooBarCode, FooBar>();
         let foobar = FooBar::deserialize(&mut deser).expect("fail");
         println!("FooBar = {:?}", foobar);
