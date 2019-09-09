@@ -18,6 +18,7 @@ use std::io::BufReader;
 use std::iter::Iterator;
 use std::path::Path;
 
+#[derive(Debug)]
 #[derive(Deserialize, Serialize)]
 pub struct Txn {
     pub client_id: SessionId,
@@ -27,6 +28,7 @@ pub struct Txn {
     pub op: TxnOperation,
 }
 
+#[derive(Debug)]
 #[derive(Deserialize, Serialize)]
 #[derive(NamedType)]
 pub enum TxnOperation {
@@ -132,7 +134,7 @@ mod tests {
 
         tnxlog.for_each(|x| {
             let txn = x.unwrap();
-            println!("{}", serde_json::to_string(&txn).unwrap())
+            println!("{:?}", txn)
         });
     }
 }

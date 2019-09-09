@@ -8,32 +8,40 @@ use serde_derive::Serialize;
 // See https://github.com/apache/zookeeper/blob/trunk/src/zookeeper.jute
 
 /// ZooKeeper transaction id
-#[derive(Serialize, Deserialize, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize)]
 pub struct Zxid(pub i64);
 
-#[derive(Serialize, Deserialize, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize)]
 pub struct Timestamp(pub u64);
 
-#[derive(Serialize, Deserialize, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize)]
 pub struct Duration(pub i32);
 
-#[derive(Serialize, Deserialize, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize)]
 pub struct Version(pub i32);
 pub const ANY_VERSION: Version = Version(-1);
 
-#[derive(Serialize, Deserialize, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize)]
 pub struct OptionalVersion(pub i32);
 
-#[derive(Serialize, Deserialize, PartialEq)]
+#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize)]
 pub struct SessionId(pub i64);
 
 /// Exchange id, a correlation id sent by a request and returned in its response.
 /// It starts at 1, but can be negative for server-generated notifications (see
 /// `FinalRequestProcessor` in ZK server)
-#[derive(Serialize, Deserialize, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize)]
 pub struct Xid(pub i32);
 
 /// Permissions associated to an ACL
+#[derive(Debug, PartialEq)]
 #[derive(Serialize, Deserialize)]
 pub struct Perms(u32);
 
@@ -59,6 +67,7 @@ pub const PERM_ADMIN: Perms = Perms(1 << 4);
 pub const PERM_ALL: Perms = Perms(PERM_READ.0 | PERM_WRITE.0 | PERM_CREATE.0 | PERM_DELETE.0 | PERM_ADMIN.0);
 
 // See CreateMode.java
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub enum CreateMode {
     Persistent = 0,
@@ -103,12 +112,14 @@ impl CreateMode {
 
 //----- Data
 
-#[derive(Serialize, Deserialize, PartialEq)]
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Id {
     pub scheme: String,
     pub id: String,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct ACL {
     pub perms: Perms,
@@ -116,6 +127,7 @@ pub struct ACL {
 }
 
 /// Information shared with the client
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct Stat {
     /// Created zxid
@@ -143,6 +155,7 @@ pub struct Stat {
 }
 
 /// Information explicitly stored by the server persistently
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct StatPersisted {
     /// created zxid

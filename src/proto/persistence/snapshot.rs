@@ -13,21 +13,25 @@ use std::io::BufReader;
 use std::iter::Iterator;
 use std::path::Path;
 
+#[derive(Debug)]
 #[derive(Deserialize, Serialize)]
 pub struct ACLRef(i64);
 
+#[derive(Debug)]
 #[derive(Deserialize, Serialize)]
 pub struct Session {
     pub id: SessionId,
     pub timeout: Duration,
 }
 
+#[derive(Debug)]
 #[derive(Deserialize, Serialize)]
 pub struct ACLCacheEntry {
     pub entry_id: ACLRef,
     pub acl: Vec<ACL>,
 }
 
+#[derive(Debug)]
 #[derive(Deserialize, Serialize)]
 pub struct DataNode {
     #[serde(with = "serde_bytes")]
@@ -249,7 +253,7 @@ mod tests {
         // println!("sessions: {}", snap.count);
         &snap.for_each(|x| {
             let session = x.unwrap();
-            // println!("{}", serde_json::to_string(&session).unwrap());
+            //println!("{:?}", session);
         });
 
         let mut snap = snap.acls().unwrap();
@@ -257,7 +261,7 @@ mod tests {
         // println!("acls: {}", snap.count);
         &snap.for_each(|x| {
             let acl = x.unwrap();
-            // println!("{}", serde_json::to_string(&session).unwrap());
+            //println!("{:?}", acl);
         });
 
         let snap = snap.data_nodes().unwrap();
@@ -269,7 +273,7 @@ mod tests {
             node.data = Vec::new();
 
             // println!("{} - {} bytes", path, len);
-            // println!("{}", serde_json::to_string(&node).unwrap());
+            //println!("{:?}", node);
         });
     }
 }

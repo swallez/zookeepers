@@ -55,8 +55,8 @@ pub enum OpCode {
     Error = -1,
 }
 
-#[derive(Serialize, Deserialize)]
 #[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize)]
 #[derive(ToPrimitive)]
 #[derive(IntoStaticStr, EnumIter)]
 #[derive(NamedType)]
@@ -142,6 +142,7 @@ impl ErrorCode {
     }
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct ConnectRequest {
     pub protocol_version: i32,
@@ -156,6 +157,7 @@ impl Request for ConnectRequest {
     type Response = ConnectResponse;
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct ConnectResponse {
     pub protocol_version: i32,
@@ -165,6 +167,7 @@ pub struct ConnectResponse {
     pub passwd: Vec<u8>,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct SetWatches {
     pub relative_zxid: Zxid,
@@ -173,6 +176,7 @@ pub struct SetWatches {
     pub child_watches: Vec<String>,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct RequestHeader {
     pub xid: Xid,
@@ -180,6 +184,7 @@ pub struct RequestHeader {
     pub typ: i32,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct MultiHeader {
     #[serde(rename = "type")]
@@ -188,6 +193,7 @@ pub struct MultiHeader {
     pub err: i32,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct AuthPacket {
     #[serde(rename = "type")]
@@ -197,6 +203,7 @@ pub struct AuthPacket {
     pub buffer: Vec<u8>,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct ReplyHeader {
     pub xid: Xid,
@@ -204,6 +211,7 @@ pub struct ReplyHeader {
     pub err: i32,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct GetDataRequest {
     pub path: String,
@@ -214,6 +222,7 @@ impl Request for GetDataRequest {
     type Response = GetDataResponse;
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct SetDataRequest {
     pub path: String,
@@ -226,6 +235,7 @@ impl Request for SetDataRequest {
     type Response = SetDataResponse;
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct ReconfigRequest {
     pub joining_servers: String,
@@ -238,11 +248,13 @@ impl Request for ReconfigRequest {
     type Response = GetDataResponse;
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct SetDataResponse {
     pub stat: Stat,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct GetSASLRequest {
     #[serde(with = "serde_bytes")]
@@ -253,6 +265,7 @@ impl Request for GetSASLRequest {
     type Response = SetSASLResponse; // Same response type as SetSASL
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct SetSASLRequest {
     #[serde(with = "serde_bytes")]
@@ -263,12 +276,14 @@ impl Request for SetSASLRequest {
     type Response = SetSASLResponse;
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct SetSASLResponse {
     #[serde(with = "serde_bytes")]
     pub token: Vec<u8>,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct CreateRequest {
     pub path: String,
@@ -282,6 +297,7 @@ impl Request for CreateRequest {
     type Response = CreateResponse;
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct DeleteRequest {
     pub path: String,
@@ -292,6 +308,7 @@ impl Request for DeleteRequest {
     type Response = ();
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct GetChildrenRequest {
     pub path: String,
@@ -302,6 +319,7 @@ impl Request for GetChildrenRequest {
     type Response = GetChildrenResponse;
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct GetChildren2Request {
     pub path: String,
@@ -312,6 +330,7 @@ impl Request for GetChildren2Request {
     type Response = GetChildren2Response;
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct CheckVersionRequest {
     pub path: String,
@@ -323,6 +342,7 @@ impl Request for CheckVersionRequest {
 }
 
 /// Doesn't seem to be used in the ZK server code base
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct GetMaxChildrenRequest {
     pub path: String,
@@ -333,11 +353,13 @@ impl Request for GetMaxChildrenRequest {
 }
 
 /// Doesn't seem to be used in the ZK server code base
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct GetMaxChildrenResponse {
     pub max: i32,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct SetMaxChildrenRequest {
     pub path: String,
@@ -348,6 +370,7 @@ impl Request for SetMaxChildrenRequest {
     type Response = ();
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct SyncRequest {
     pub path: String,
@@ -357,11 +380,13 @@ impl Request for SyncRequest {
     type Response = SyncResponse;
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct SyncResponse {
     pub path: String,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct GetACLRequest {
     pub path: String,
@@ -371,6 +396,7 @@ impl Request for GetACLRequest {
     type Response = GetACLResponse;
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct SetACLRequest {
     pub path: String,
@@ -382,12 +408,14 @@ impl Request for SetACLRequest {
     type Response = SetACLResponse;
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct SetACLResponse {
     pub stat: Stat,
 }
 
 // See Watcher.java
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub enum WatcherEventType {
     None = -1,
@@ -400,6 +428,7 @@ pub enum WatcherEventType {
 }
 
 // See Watcher.java
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub enum KeeperState {
     /// The client is in the disconnected state - it is not connected
@@ -434,6 +463,7 @@ pub enum KeeperState {
     Expired = -112,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct WatcherEvent {
     #[serde(rename = "type")]
@@ -443,22 +473,26 @@ pub struct WatcherEvent {
     pub path: String,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct ErrorResponse {
     pub err: ErrorCode,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct CreateResponse {
     pub path: String,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct Create2Response {
     pub path: String,
     pub stat: Stat,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct ExistsRequest {
     pub path: String,
@@ -469,11 +503,13 @@ impl Request for ExistsRequest {
     type Response = ExistsResponse;
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct ExistsResponse {
     pub stat: Stat,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct GetDataResponse {
     #[serde(with = "serde_bytes")]
@@ -481,18 +517,21 @@ pub struct GetDataResponse {
     pub stat: Stat,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct GetChildrenResponse {
     /// Name of children (not the full path)
     pub children: Vec<String>,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct GetChildren2Response {
     pub children: Vec<String>,
     pub stat: Stat,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct GetACLResponse {
     pub acl: Vec<ACL>,
@@ -500,6 +539,7 @@ pub struct GetACLResponse {
 }
 
 // See Watcher.java
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub enum WatcherType {
     Children = 1,
@@ -507,6 +547,7 @@ pub enum WatcherType {
     Any = 3,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct CheckWatchesRequest {
     pub path: String,
@@ -518,6 +559,7 @@ impl Request for CheckWatchesRequest {
     type Response = ();
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct RemoveWatchesRequest {
     pub path: String,

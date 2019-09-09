@@ -4,6 +4,7 @@ use serde_derive::Serialize;
 pub mod snapshot;
 pub mod txnlog;
 
+#[derive(Debug)]
 #[derive(Deserialize, Serialize)]
 pub struct FileHeader {
     pub magic: i32,   // Should be TXNLOG_MAGIC or SNAP_MAGIC
