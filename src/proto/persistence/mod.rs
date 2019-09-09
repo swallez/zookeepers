@@ -11,5 +11,5 @@ pub struct FileHeader {
     pub dbid: i64,
 }
 
-pub const TXNLOG_MAGIC: i32 = 0x5a4b4c47; // "ZKLG"
-pub const SNAP_MAGIC: i32 = 0x5a4b534e; // ZKSN
+pub const TXNLOG_MAGIC: i32 = 0x5a4b_4c47; // "ZKLG"
+pub const SNAP_MAGIC: i32 = 0x5a4b_534e; // ZKSN

@@ -187,7 +187,7 @@ impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<R> {
         } else {
             read_size
                 .to_usize()
-                .ok_or(Error::Message("Size value too large".to_owned()))?
+                .ok_or_else(|| Error::Message("Size value too large".to_owned()))?
         };
 
         visitor.visit_seq(JuteAccess { size, de: &mut self })
@@ -218,11 +218,11 @@ impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<R> {
         } else {
             read_size
                 .to_usize()
-                .ok_or(Error::Message("Size value too large".to_owned()))?
+                .ok_or_else(|| Error::Message("Size value too large".to_owned()))?
         };
 
         visitor.visit_map(JuteAccess {
-            size: size,
+            size,
             de: &mut self,
         })
     }
@@ -267,7 +267,7 @@ impl<'a, 'de: 'a, R: Read> SeqAccess<'de> for JuteAccess<'a, R> {
     type Error = super::error::Error;
 
     fn next_element_seed<T: DeserializeSeed<'de>>(&mut self, seed: T) -> Result<Option<T::Value>> {
-        if self.size <= 0 {
+        if self.size == 0 {
             Ok(None)
         } else {
             self.size -= 1;
@@ -284,7 +284,7 @@ impl<'a, 'de: 'a, R: Read> MapAccess<'de> for JuteAccess<'a, R> {
     type Error = super::error::Error;
 
     fn next_key_seed<K: DeserializeSeed<'de>>(&mut self, seed: K) -> Result<Option<K::Value>> {
-        if self.size <= 0 {
+        if self.size == 0 {
             Ok(None)
         } else {
             self.size -= 1;

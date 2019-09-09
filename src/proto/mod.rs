@@ -51,7 +51,7 @@ impl std::ops::BitOr for Perms {
     }
 }
 
-pub const PERM_READ: Perms = Perms(1 << 0);
+pub const PERM_READ: Perms = Perms(1);
 pub const PERM_WRITE: Perms = Perms(1 << 1);
 pub const PERM_CREATE: Perms = Perms(1 << 2);
 pub const PERM_DELETE: Perms = Perms(1 << 3);

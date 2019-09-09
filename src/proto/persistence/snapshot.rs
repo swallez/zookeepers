@@ -124,7 +124,7 @@ impl SnapshotFile<SessionsState> {
     /// read yet.
     pub fn acls(mut self) -> Result<SnapshotFile<ACLCacheState>, Error> {
         // drain iterator
-        &mut self.last();
+        self.last();
 
         if self.errored {
             return Err(failure::err_msg("Stream already errored out"));
@@ -166,7 +166,7 @@ impl SnapshotFile<ACLCacheState> {
     /// Transition to data nodes. It will skip any ACL cache entries that have not been read yet.
     pub fn data_nodes(mut self) -> Result<SnapshotFile<DataNodesState>, Error> {
         // drain iterator
-        &mut self.last();
+        self.last();
 
         if self.errored {
             return Err(failure::err_msg("Stream already errored out"));
