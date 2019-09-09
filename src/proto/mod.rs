@@ -1,6 +1,5 @@
-
-pub mod proto;
 pub mod persistence;
+pub mod proto;
 pub mod txn;
 
 use serde_derive::Deserialize;
@@ -58,7 +57,6 @@ pub const PERM_CREATE: Perms = Perms(1 << 2);
 pub const PERM_DELETE: Perms = Perms(1 << 3);
 pub const PERM_ADMIN: Perms = Perms(1 << 4);
 pub const PERM_ALL: Perms = Perms(PERM_READ.0 | PERM_WRITE.0 | PERM_CREATE.0 | PERM_DELETE.0 | PERM_ADMIN.0);
-
 
 // See CreateMode.java
 #[derive(Serialize, Deserialize)]
@@ -181,15 +179,8 @@ pub mod test {
 
         let x = OpCode::CloseSession;
 
-//        // EnumString
-//        let x = OpCode::from_str("CloseSession").expect("Cannot resolve enum");
-//        assert_eq!(x, OpCode::CloseSession);
-
         // ToPrimitive
         assert_eq!(x.to_i32(), Some(-11));
-
-//        // FromPrimitive
-//        assert_eq!(OpCode::from_i32(-11), Some(OpCode::CloseSession));
 
         // IntoStaticStr
         let x: &'static str = OpCode::Create.into();

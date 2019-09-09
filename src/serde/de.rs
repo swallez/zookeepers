@@ -1,9 +1,7 @@
-
-
-use std::io::Read;
 use std::collections::HashMap;
+use std::io::Read;
 
-use serde::de::{self, DeserializeSeed, MapAccess, VariantAccess, EnumAccess, SeqAccess, Visitor, IntoDeserializer};
+use serde::de::{self, DeserializeSeed, EnumAccess, IntoDeserializer, MapAccess, SeqAccess, VariantAccess, Visitor};
 
 use byteorder::{BigEndian, ReadBytesExt};
 
@@ -21,21 +19,26 @@ pub trait OpCodeEnum {
     fn names_to_codes() -> HashMap<&'static str, i32>;
 }
 
-impl <T, I> OpCodeEnum for T where
-    T: IntoEnumIterator<Iterator=I>,
-    I: Iterator<Item=T>,
+impl<T, I> OpCodeEnum for T
+where
+    T: IntoEnumIterator<Iterator = I>,
+    I: Iterator<Item = T>,
     T: ToPrimitive,
     T: Into<&'static str>,
 {
     fn codes_to_names() -> HashMap<i32, &'static str> {
-        T::iter().map(|v| (v.to_i32().expect("Cannot convert to i32"), v.into())).collect()
+        T::iter()
+            .map(|v| (v.to_i32().expect("Cannot convert to i32"), v.into()))
+            .collect()
     }
 
     fn names_to_codes() -> HashMap<&'static str, i32> {
-        T::iter().map(|v| {
-            let i = v.to_i32().expect("Cannot convert to i32");
-            (v.into(), i)
-        }).collect()
+        T::iter()
+            .map(|v| {
+                let i = v.to_i32().expect("Cannot convert to i32");
+                (v.into(), i)
+            })
+            .collect()
     }
 }
 
@@ -47,20 +50,16 @@ pub struct Deserializer<R> {
 }
 
 pub fn from_reader<R: Read>(reader: R) -> Deserializer<R> {
-    Deserializer{
+    Deserializer {
         reader,
         enum_mappings: HashMap::new(),
     }
 }
 
-impl<'de, R:Read> Deserializer<R> {
-
+impl<'de, R: Read> Deserializer<R> {
     /// Add a discriminant mapping for struct enum types.
     pub fn add_enum_mapping<E: OpCodeEnum, T: NamedType>(&mut self) {
-        self.enum_mappings.insert(
-            T::short_type_name(),
-            E::codes_to_names()
-        );
+        self.enum_mappings.insert(T::short_type_name(), E::codes_to_names());
     }
 }
 
@@ -186,21 +185,28 @@ impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<R> {
         let size = if read_size < 0 {
             0
         } else {
-            read_size.to_usize().ok_or(Error::Message("Size value too large".to_owned()))?
+            read_size
+                .to_usize()
+                .ok_or(Error::Message("Size value too large".to_owned()))?
         };
 
-        visitor.visit_seq(JuteAccess {size, de: &mut self})
+        visitor.visit_seq(JuteAccess { size, de: &mut self })
     }
 
     fn deserialize_tuple<V: Visitor<'de>>(mut self, len: usize, visitor: V) -> Result<V::Value> {
         // A tuple is just a sequence of values
         visitor.visit_seq(JuteAccess {
             size: len,
-            de: &mut self
+            de: &mut self,
         })
     }
 
-    fn deserialize_tuple_struct<V: Visitor<'de>>(self, _name: &'static str, len: usize, visitor: V) -> Result<V::Value> {
+    fn deserialize_tuple_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        len: usize,
+        visitor: V,
+    ) -> Result<V::Value> {
         self.deserialize_tuple(len, visitor)
     }
 
@@ -210,13 +216,23 @@ impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<R> {
         let size = if read_size < 0 {
             0
         } else {
-            read_size.to_usize().ok_or(Error::Message("Size value too large".to_owned()))?
+            read_size
+                .to_usize()
+                .ok_or(Error::Message("Size value too large".to_owned()))?
         };
 
-        visitor.visit_map(JuteAccess {size: size, de: &mut self})
+        visitor.visit_map(JuteAccess {
+            size: size,
+            de: &mut self,
+        })
     }
 
-    fn deserialize_struct<V: Visitor<'de>>(self, _name: &'static str, fields: &'static [&'static str], visitor: V) -> Result<V::Value> {
+    fn deserialize_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value> {
         // Field names are not stored, so just consider it as a tuple (where fields are ordered)
         self.deserialize_tuple(fields.len(), visitor)
     }
@@ -225,9 +241,12 @@ impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<R> {
         mut self,
         name: &'static str,
         _variants: &'static [&'static str],
-        visitor: V
+        visitor: V,
     ) -> Result<V::Value> {
-        visitor.visit_enum(JuteEnumAccess {enum_type: name, de: &mut self})
+        visitor.visit_enum(JuteEnumAccess {
+            enum_type: name,
+            de: &mut self,
+        })
     }
 
     fn deserialize_identifier<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value> {
@@ -244,7 +263,7 @@ struct JuteAccess<'a, R: Read> {
     size: usize,
 }
 
-impl <'a, 'de: 'a, R: Read> SeqAccess<'de> for JuteAccess<'a, R> {
+impl<'a, 'de: 'a, R: Read> SeqAccess<'de> for JuteAccess<'a, R> {
     type Error = super::error::Error;
 
     fn next_element_seed<T: DeserializeSeed<'de>>(&mut self, seed: T) -> Result<Option<T::Value>> {
@@ -261,10 +280,10 @@ impl <'a, 'de: 'a, R: Read> SeqAccess<'de> for JuteAccess<'a, R> {
     }
 }
 
-impl <'a, 'de: 'a, R: Read> MapAccess<'de> for JuteAccess<'a, R> {
+impl<'a, 'de: 'a, R: Read> MapAccess<'de> for JuteAccess<'a, R> {
     type Error = super::error::Error;
 
-    fn next_key_seed<K: DeserializeSeed<'de>>(&mut self, seed: K) -> Result<Option<K::Value>>  {
+    fn next_key_seed<K: DeserializeSeed<'de>>(&mut self, seed: K) -> Result<Option<K::Value>> {
         if self.size <= 0 {
             Ok(None)
         } else {
@@ -286,29 +305,31 @@ struct JuteEnumAccess<'a, R: Read> {
     enum_type: &'static str,
 }
 
-impl <'a, 'de: 'a, R: Read> EnumAccess<'de> for JuteEnumAccess<'a, R> {
+impl<'a, 'de: 'a, R: Read> EnumAccess<'de> for JuteEnumAccess<'a, R> {
     type Error = super::error::Error;
     type Variant = Self;
 
     fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant)>
-        where
-            V: serde::de::DeserializeSeed<'de>,
+    where
+        V: serde::de::DeserializeSeed<'de>,
     {
-        let mappings = self.de.enum_mappings
+        let mappings = self
+            .de
+            .enum_mappings
             .get(self.enum_type)
-            .ok_or_else(||Error::Message(format!("Cannot find mapping for type {}", self.enum_type)))?;
+            .ok_or_else(|| Error::Message(format!("Cannot find mapping for type {}", self.enum_type)))?;
 
         let d = self.de.reader.read_i32::<BigEndian>()?;
         let idx = mappings
             .get(&d)
-            .ok_or_else(||Error::Message(format!("Wrong discriminant for {}: {}", self.enum_type, d)))?;
+            .ok_or_else(|| Error::Message(format!("Wrong discriminant for {}: {}", self.enum_type, d)))?;
 
         let val: Result<_> = seed.deserialize(idx.into_deserializer());
         Ok((val?, self))
     }
 }
 
-impl <'a, 'de: 'a, R: Read> VariantAccess<'de> for JuteEnumAccess<'a, R> {
+impl<'a, 'de: 'a, R: Read> VariantAccess<'de> for JuteEnumAccess<'a, R> {
     type Error = super::error::Error;
 
     fn unit_variant(self) -> Result<()> {
@@ -328,12 +349,11 @@ impl <'a, 'de: 'a, R: Read> VariantAccess<'de> for JuteEnumAccess<'a, R> {
     }
 }
 
-
 #[cfg(test)]
 pub mod test {
 
-    use serde_derive::Deserialize;
     use serde::Deserialize;
+    use serde_derive::Deserialize;
 
     #[derive(Debug, PartialEq, Deserialize)]
     struct NewType(i32);
@@ -343,7 +363,7 @@ pub mod test {
         a: NewType,
         x: i32,
         y: String,
-        z: std::collections::HashMap<i8, String>
+        z: std::collections::HashMap<i8, String>,
     }
 
     #[derive(Deserialize)]
@@ -354,14 +374,14 @@ pub mod test {
     #[test]
     fn test_deser() {
         let data: Vec<u8> = vec![
-            0x01, 0x02, 0x03, 0x04,
-            0x05, 0x06, 0x07, 0x08,
+            0x01, 0x02, 0x03, 0x04, // i32
+            0x05, 0x06, 0x07, 0x08, // i32
             0x00, 0x00, 0x00, 0x04, // string length
             0x61, 0x62, 0x63, 0x64, // "abcd"
             0x00, 0x00, 0x00, 0x01, // map length
-            0x0F,                   // i8
+            0x0F, // i8
             0x00, 0x00, 0x00, 0x04, // string length
-            0x61, 0x62, 0x63, 0x64  // string
+            0x61, 0x62, 0x63, 0x64, // string
         ];
         let mut bytes = data.as_slice();
 
@@ -379,8 +399,8 @@ pub mod test {
 
     //---------------------
 
-    use named_type_derive::*;
     use named_type::NamedType;
+    use named_type_derive::*;
 
     #[derive(Debug, PartialEq)]
     #[derive(ToPrimitive)]
@@ -394,16 +414,14 @@ pub mod test {
     #[derive(NamedType)]
     enum FooBar {
         Foo(i32),
-        Bar(String)
+        Bar(String),
     }
 
     #[test]
     fn test_enum() {
-
-
         let data: Vec<u8> = vec![
             0x00, 0x00, 0x00, 0x03, // Foo discriminant
-            0x01, 0x02, 0x03, 0x04  // i32
+            0x01, 0x02, 0x03, 0x04, // i32
         ];
         let mut bytes = data.as_slice();
 

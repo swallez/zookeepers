@@ -13,4 +13,3 @@ pub struct FileHeader {
 
 pub const TXNLOG_MAGIC: i32 = 0x5a4b4c47; // "ZKLG"
 pub const SNAP_MAGIC: i32 = 0x5a4b534e; // ZKSN
-

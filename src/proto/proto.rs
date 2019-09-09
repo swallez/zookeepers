@@ -1,17 +1,17 @@
+use named_type::NamedType;
+use named_type_derive::NamedType;
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
-use named_type_derive::NamedType;
-use named_type::NamedType;
 
-use super::Zxid;
-use super::Xid;
+use super::CreateMode;
 use super::Duration;
-use super::Stat;
-use super::ACL;
-use super::Version;
 use super::OptionalVersion;
 use super::SessionId;
-use super::CreateMode;
+use super::Stat;
+use super::Version;
+use super::Xid;
+use super::Zxid;
+use super::ACL;
 
 /// The `Request` trait holds the response type, so that we can implement strongly typed RPC
 pub trait Request {
@@ -52,7 +52,7 @@ pub enum OpCode {
     Sasl = 102,
     CreateSession = -10,
     CloseSession = -11,
-    Error = -1
+    Error = -1,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -148,7 +148,7 @@ pub struct ConnectRequest {
     pub last_zxid_seen: Zxid,
     pub time_out: Duration,
     pub session_id: SessionId,
-    #[serde(with="serde_bytes")]
+    #[serde(with = "serde_bytes")]
     pub passwd: Vec<u8>,
 }
 
@@ -161,7 +161,7 @@ pub struct ConnectResponse {
     pub protocol_version: i32,
     pub time_out: Duration,
     pub session_id: SessionId,
-    #[serde(with="serde_bytes")]
+    #[serde(with = "serde_bytes")]
     pub passwd: Vec<u8>,
 }
 
@@ -193,7 +193,7 @@ pub struct AuthPacket {
     #[serde(rename = "type")]
     pub typ: i32,
     pub scheme: String,
-    #[serde(with="serde_bytes")]
+    #[serde(with = "serde_bytes")]
     pub buffer: Vec<u8>,
 }
 
@@ -217,7 +217,7 @@ impl Request for GetDataRequest {
 #[derive(Serialize, Deserialize)]
 pub struct SetDataRequest {
     pub path: String,
-    #[serde(with="serde_bytes")]
+    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
     pub version: Version,
 }
@@ -245,8 +245,8 @@ pub struct SetDataResponse {
 
 #[derive(Serialize, Deserialize)]
 pub struct GetSASLRequest {
-    #[serde(with="serde_bytes")]
-    pub token: Vec<u8>
+    #[serde(with = "serde_bytes")]
+    pub token: Vec<u8>,
 }
 
 impl Request for GetSASLRequest {
@@ -255,8 +255,8 @@ impl Request for GetSASLRequest {
 
 #[derive(Serialize, Deserialize)]
 pub struct SetSASLRequest {
-    #[serde(with="serde_bytes")]
-    pub token: Vec<u8>
+    #[serde(with = "serde_bytes")]
+    pub token: Vec<u8>,
 }
 
 impl Request for SetSASLRequest {
@@ -265,14 +265,14 @@ impl Request for SetSASLRequest {
 
 #[derive(Serialize, Deserialize)]
 pub struct SetSASLResponse {
-    #[serde(with="serde_bytes")]
-    pub token: Vec<u8>
+    #[serde(with = "serde_bytes")]
+    pub token: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct CreateRequest {
     pub path: String,
-    #[serde(with="serde_bytes")]
+    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
     pub acl: Vec<ACL>,
     pub flags: CreateMode,
@@ -315,7 +315,7 @@ impl Request for GetChildren2Request {
 #[derive(Serialize, Deserialize)]
 pub struct CheckVersionRequest {
     pub path: String,
-    pub version: Version
+    pub version: Version,
 }
 
 impl Request for CheckVersionRequest {
@@ -476,7 +476,7 @@ pub struct ExistsResponse {
 
 #[derive(Serialize, Deserialize)]
 pub struct GetDataResponse {
-    #[serde(with="serde_bytes")]
+    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
     pub stat: Stat,
 }

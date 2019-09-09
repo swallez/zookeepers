@@ -1,5 +1,3 @@
-
-
 use std::fmt::{Display, Formatter};
 
 use serde::{de, ser};
@@ -11,7 +9,7 @@ pub enum Error {
     Message(String),
     TooLarge(usize),
     NegativeValue,
-    Eof
+    Eof,
 }
 
 impl From<std::io::Error> for Error {
@@ -19,7 +17,7 @@ impl From<std::io::Error> for Error {
         use std::io::ErrorKind;
         match io_err.kind() {
             ErrorKind::WouldBlock | ErrorKind::UnexpectedEof => Error::Eof,
-            _ => Error::Message(io_err.to_string())
+            _ => Error::Message(io_err.to_string()),
         }
     }
 }
@@ -59,6 +57,4 @@ impl Display for Error {
     }
 }
 
-impl std::error::Error for Error {
-
-}
+impl std::error::Error for Error {}

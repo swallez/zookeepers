@@ -1,14 +1,14 @@
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 
-use super::Zxid;
-use super::Xid;
-use super::ACL;
-use super::Version;
-use super::SessionId;
+use super::proto::{ErrorCode, OpCode};
 use super::Duration;
+use super::SessionId;
 use super::Timestamp;
-use super::proto::{ ErrorCode, OpCode };
+use super::Version;
+use super::Xid;
+use super::Zxid;
+use super::ACL;
 
 #[derive(Serialize, Deserialize)]
 pub struct TxnHeader {
@@ -16,14 +16,14 @@ pub struct TxnHeader {
     pub cxid: Xid,
     pub zxid: Zxid,
     pub time: Timestamp,
-    #[serde(rename="type")]
+    #[serde(rename = "type")]
     pub typ: OpCode,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct CreateTxnV0 {
     pub path: String,
-    #[serde(with="serde_bytes")]
+    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
     pub acl: Vec<ACL>,
     pub ephemeral: bool,
@@ -41,7 +41,7 @@ pub struct CreateTxn {
 #[derive(Serialize, Deserialize)]
 pub struct CreateContainerTxn {
     pub path: String,
-    #[serde(with="serde_bytes")]
+    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
     pub acl: Vec<ACL>,
     pub parent_c_version: Version,
@@ -50,7 +50,7 @@ pub struct CreateContainerTxn {
 #[derive(Serialize, Deserialize)]
 pub struct CreateTTLTxn {
     pub path: String,
-    #[serde(with="serde_bytes")]
+    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
     pub acl: Vec<ACL>,
     pub parent_c_version: Version,
@@ -65,7 +65,7 @@ pub struct DeleteTxn {
 #[derive(Serialize, Deserialize)]
 pub struct SetDataTxn {
     pub path: String,
-    #[serde(with="serde_bytes")]
+    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
     pub version: Version,
 }
@@ -102,9 +102,9 @@ pub struct ErrorTxn {
 /// Use `Transaction` for typed structs
 #[derive(Serialize, Deserialize)]
 pub struct Txn {
-    #[serde(rename="type")]
+    #[serde(rename = "type")]
     pub typ: OpCode,
-    #[serde(with="serde_bytes")]
+    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
 }
 
@@ -130,4 +130,3 @@ pub enum Transaction {
     Multi(MultiTxn),
     //Check(CheckVersionTxn), -- not persisted
 }
-

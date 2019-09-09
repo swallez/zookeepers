@@ -1,22 +1,22 @@
+use named_type::NamedType;
+use named_type_derive::NamedType;
+use serde::Deserialize;
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
-use serde::Deserialize;
-use named_type_derive::NamedType;
-use named_type::NamedType;
 
 use crate::proto::proto::ErrorCode;
 use crate::proto::proto::OpCode;
+use crate::proto::txn::*;
 use crate::proto::SessionId;
 use crate::proto::Timestamp;
 use crate::proto::Xid;
 use crate::proto::Zxid;
-use crate::proto::txn::*;
 
-use std::path::Path;
-use std::io::BufReader;
-use std::fs::File;
 use failure::Error;
+use std::fs::File;
+use std::io::BufReader;
 use std::iter::Iterator;
+use std::path::Path;
 
 #[derive(Deserialize, Serialize)]
 pub struct Txn {
@@ -45,7 +45,7 @@ pub enum TxnOperation {
     Multi(MultiTxn),
 }
 
-/// A ZooKeeper transaction log file. After the initial header, it is composed of
+/// A ZooKeeper transaction log file. After the initial header, it is a sequence of transactions.
 ///
 /// See [`LogFormatter.java`] and [`SerializeUtils.java`] for details.
 ///
@@ -58,7 +58,6 @@ pub struct TxnlogFile {
 }
 
 impl TxnlogFile {
-
     pub fn new(path: impl AsRef<Path>) -> Result<TxnlogFile, Error> {
         let file = BufReader::new(File::open(path)?);
 
@@ -76,10 +75,7 @@ impl TxnlogFile {
             return Err(failure::err_msg("Wrong version number"));
         }
 
-        Ok(TxnlogFile{
-            deser,
-            done: false,
-        })
+        Ok(TxnlogFile { deser, done: false })
     }
 }
 
@@ -89,12 +85,15 @@ impl Iterator for TxnlogFile {
     fn next(&mut self) -> Option<Self::Item> {
         // Evaluate an expression returning a result and end the iterator if it's an error.
         macro_rules! try_or_end {
-            ($e:expr) => (
+            ($e:expr) => {
                 match $e {
                     Ok(v) => v,
-                    Err(e) => { self.done = true; return Some(Err(e.into())); }
+                    Err(e) => {
+                        self.done = true;
+                        return Some(Err(e.into()));
+                    }
                 }
-            )
+            };
         }
 
         if self.done {

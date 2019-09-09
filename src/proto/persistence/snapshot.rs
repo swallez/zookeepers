@@ -1,17 +1,17 @@
+use serde::Deserialize;
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
-use serde::Deserialize;
 
-use crate::proto::SessionId;
-use crate::proto::ACL;
-use crate::proto::StatPersisted;
 use crate::proto::Duration;
+use crate::proto::SessionId;
+use crate::proto::StatPersisted;
+use crate::proto::ACL;
 
-use std::path::Path;
-use std::io::BufReader;
-use std::fs::File;
 use failure::Error;
+use std::fs::File;
+use std::io::BufReader;
 use std::iter::Iterator;
+use std::path::Path;
 
 #[derive(Deserialize, Serialize)]
 pub struct ACLRef(i64);
@@ -25,15 +25,15 @@ pub struct Session {
 #[derive(Deserialize, Serialize)]
 pub struct ACLCacheEntry {
     pub entry_id: ACLRef,
-    pub acl: Vec<ACL>
+    pub acl: Vec<ACL>,
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct DataNode {
-    #[serde(with="serde_bytes")]
+    #[serde(with = "serde_bytes")]
     data: Vec<u8>,
     acl: ACLRef,
-    stat: StatPersisted
+    stat: StatPersisted,
 }
 
 /// A ZooKeeper snapshot file. After the initial header, it is composed of 3 sections:
@@ -61,7 +61,6 @@ pub struct SnapshotFile<S> {
 
 pub struct InitState {}
 impl SnapshotFile<InitState> {
-
     pub fn new(path: impl AsRef<Path>) -> Result<SnapshotFile<InitState>, Error> {
         let file = BufReader::new(File::open(path)?);
 
@@ -76,11 +75,11 @@ impl SnapshotFile<InitState> {
             return Err(failure::err_msg("Wrong version number"));
         }
 
-        Ok(SnapshotFile{
+        Ok(SnapshotFile {
             deser,
             count: 0,
             errored: false,
-            _state: InitState {}
+            _state: InitState {},
         })
     }
 
@@ -93,7 +92,7 @@ impl SnapshotFile<InitState> {
 /// Generic implementation of Iterator::next
 fn next_item<'de, T: Deserialize<'de>, S>(snap: &mut SnapshotFile<S>) -> Option<Result<T, Error>> {
     if snap.count == 0 || snap.errored {
-        return None
+        return None;
     }
     snap.count -= 1;
 
@@ -111,21 +110,19 @@ fn next_item<'de, T: Deserialize<'de>, S>(snap: &mut SnapshotFile<S>) -> Option<
 pub struct SessionsState {}
 
 impl SnapshotFile<SessionsState> {
-
     fn new_sessions<T>(mut prev: SnapshotFile<T>) -> Result<Self, Error> {
-        let count =  <i32>::deserialize(&mut prev.deser)? as usize;
+        let count = <i32>::deserialize(&mut prev.deser)? as usize;
         Ok(SnapshotFile {
             deser: prev.deser,
             count,
             errored: false,
-            _state: SessionsState{},
+            _state: SessionsState {},
         })
     }
 
     /// Transition to ACL cache entries. It will skip any session states that have not been
     /// read yet.
     pub fn acls(mut self) -> Result<SnapshotFile<ACLCacheState>, Error> {
-
         // drain iterator
         &mut self.last();
 
@@ -156,20 +153,18 @@ impl Iterator for &mut SnapshotFile<SessionsState> {
 pub struct ACLCacheState {}
 
 impl SnapshotFile<ACLCacheState> {
-
     fn new_acl_cache<T>(mut prev: SnapshotFile<T>) -> Result<SnapshotFile<ACLCacheState>, Error> {
         let count = <i32>::deserialize(&mut prev.deser)? as usize;
         Ok(SnapshotFile {
             deser: prev.deser,
             count,
             errored: false,
-            _state: ACLCacheState{},
+            _state: ACLCacheState {},
         })
     }
 
     /// Transition to data nodes. It will skip any ACL cache entries that have not been read yet.
     pub fn data_nodes(mut self) -> Result<SnapshotFile<DataNodesState>, Error> {
-
         // drain iterator
         &mut self.last();
 
@@ -192,11 +187,10 @@ impl Iterator for &mut SnapshotFile<ACLCacheState> {
 //--------------------------------------------------------------------------------------------------
 // Part 4: data nodes
 
-pub struct DataNodesState{}
+pub struct DataNodesState {}
 
 impl SnapshotFile<DataNodesState> {
     fn new_data_nodes<T>(prev: SnapshotFile<T>) -> Result<SnapshotFile<DataNodesState>, Error> {
-
         // We don't have a count of entries for this section. This is a series of (path, data) and
         // the section ends when we see a "/" path.
 
@@ -204,7 +198,7 @@ impl SnapshotFile<DataNodesState> {
             deser: prev.deser,
             count: 1,
             errored: false,
-            _state: DataNodesState{},
+            _state: DataNodesState {},
         })
     }
 }
@@ -248,37 +242,34 @@ mod tests {
 
     #[test]
     fn read_snapshot() {
-
         let snap = SnapshotFile::new("data/version-2/snapshot.1000005d0").unwrap();
 
         let mut snap = snap.sessions().unwrap();
 
-//        println!("sessions: {}", snap.count);
+        // println!("sessions: {}", snap.count);
         &snap.for_each(|x| {
             let session = x.unwrap();
-//            println!("{}", serde_json::to_string(&session).unwrap());
+            // println!("{}", serde_json::to_string(&session).unwrap());
         });
 
         let mut snap = snap.acls().unwrap();
 
-//        println!("acls: {}", snap.count);
+        // println!("acls: {}", snap.count);
         &snap.for_each(|x| {
             let acl = x.unwrap();
-//            println!("{}", serde_json::to_string(&session).unwrap());
+            // println!("{}", serde_json::to_string(&session).unwrap());
         });
-
 
         let snap = snap.data_nodes().unwrap();
 
-//        println!("data nodes:");
+        // println!("data nodes:");
         &snap.for_each(|x| {
             let (path, mut node) = x.unwrap();
             let len = node.data.len();
             node.data = Vec::new();
 
-//            println!("{} - {} bytes", path, len);
-//            println!("{}", serde_json::to_string(&node).unwrap());
+            // println!("{} - {} bytes", path, len);
+            // println!("{}", serde_json::to_string(&node).unwrap());
         });
-
     }
 }
