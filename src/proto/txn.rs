@@ -1,7 +1,9 @@
+use named_type::NamedType;
+use named_type_derive::NamedType;
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 
-use super::proto::{ErrorCode, OpCode};
+use super::proto::ErrorCode;
 use super::Duration;
 use super::SessionId;
 use super::Timestamp;
@@ -10,6 +12,10 @@ use super::Xid;
 use super::Zxid;
 use super::ACL;
 
+/// Transaction header.
+///
+/// Compared to `ZooKeeper.jute` it doesn't contain the operation type, which is handled in a
+/// type-safe way in `TxnOperation`.
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct TxnHeader {
@@ -17,18 +23,6 @@ pub struct TxnHeader {
     pub cxid: Xid,
     pub zxid: Zxid,
     pub time: Timestamp,
-    #[serde(rename = "type")]
-    pub typ: OpCode,
-}
-
-#[derive(Debug)]
-#[derive(Serialize, Deserialize)]
-pub struct CreateTxnV0 {
-    pub path: String,
-    #[serde(with = "serde_bytes")]
-    pub data: Vec<u8>,
-    pub acl: Vec<ACL>,
-    pub ephemeral: bool,
 }
 
 #[derive(Debug)]
@@ -111,37 +105,54 @@ pub struct ErrorTxn {
     pub err: ErrorCode,
 }
 
-/// Use `Transaction` for typed structs
-#[derive(Debug)]
-#[derive(Serialize, Deserialize)]
-pub struct Txn {
-    #[serde(rename = "type")]
-    pub typ: OpCode,
-    #[serde(with = "serde_bytes")]
-    pub data: Vec<u8>,
-}
-
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct MultiTxn {
-    pub txns: Vec<Transaction>,
+    pub txns: Vec<MultiTxnOperation>,
 }
 
-// See SerializeUtils.java
 #[derive(Debug)]
-#[derive(Serialize, Deserialize)]
-pub enum Transaction {
-    CreateSession(CreateSessionTxn),
+#[derive(Deserialize, Serialize)]
+#[derive(NamedType)]
+pub enum MultiTxnOperation {
     Create(CreateTxn),
     Create2(CreateTxn),
     CreateTTL(CreateTTLTxn),
     CreateContainer(CreateContainerTxn),
     Delete(DeleteTxn),
     DeleteContainer(DeleteTxn),
-    Reconfig,
+    SetData(SetDataTxn),
+    Error(ErrorTxn),
+    Check(CheckVersionTxn),
+}
+
+/// A transaction, composed of its header and operation
+#[derive(Debug)]
+#[derive(Deserialize, Serialize)]
+pub struct Txn {
+    pub header: TxnHeader,
+    pub op: TxnOperation,
+}
+
+/// A transaction operation.
+///
+/// There's a hack in SerializeUtils.deserializeTxn for CreateV0 transactions that don't contain
+/// a version id. We assume the files we process are not ancient enough to have those.
+#[derive(Debug)]
+#[derive(Deserialize, Serialize)]
+#[derive(NamedType)]
+pub enum TxnOperation {
+    CreateSession(CreateSessionTxn),
+    CloseSession,
+    Create(CreateTxn),
+    Create2(CreateTxn),
+    CreateTTL(CreateTTLTxn),
+    CreateContainer(CreateContainerTxn),
+    Delete(DeleteTxn),
+    DeleteContainer(DeleteTxn),
+    Reconfig(SetDataTxn),
     SetData(SetDataTxn),
     SetACL(SetACLTxn),
     Error(ErrorTxn),
     Multi(MultiTxn),
-    //Check(CheckVersionTxn), -- not persisted
 }

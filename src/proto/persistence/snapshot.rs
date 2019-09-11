@@ -5,6 +5,7 @@ use serde_derive::Serialize;
 use crate::proto::Duration;
 use crate::proto::SessionId;
 use crate::proto::StatPersisted;
+use crate::proto::Zxid;
 use crate::proto::ACL;
 
 use failure::Error;
@@ -57,15 +58,36 @@ pub struct SnapshotFile<S> {
     deser: crate::serde::Deserializer<BufReader<File>>,
     count: usize,
     errored: bool,
-    _state: S,
+    state: S,
 }
 
 //--------------------------------------------------------------------------------------------------
 // Part 1: header
 
-pub struct InitState {}
+pub struct InitState {
+    zxid: Zxid,
+}
+
 impl SnapshotFile<InitState> {
+    /// Find the most recent snapshot in a directory
+    pub fn most_recent_snapshot(dir: impl AsRef<Path>) -> Result<Option<SnapshotFile<InitState>>, Error> {
+        let mut snapshot_paths = std::fs::read_dir(dir)?
+            .filter_map(|r| r.ok())
+            .map(|entry| entry.path())
+            .filter(|path| path.starts_with("snapshot."))
+            .collect::<Vec<_>>();
+
+        snapshot_paths.sort();
+
+        snapshot_paths.pop().map(|path| Self::new(path)).transpose()
+    }
+
     pub fn new(path: impl AsRef<Path>) -> Result<SnapshotFile<InitState>, Error> {
+        let path = path.as_ref();
+
+        let zxid =
+            super::zxid_from_path(path).ok_or_else(|| format_err!("Can't parse version in path {}", path.display()))?;
+
         let file = BufReader::new(File::open(path)?);
 
         let mut deser = crate::serde::de::from_reader(file);
@@ -83,8 +105,13 @@ impl SnapshotFile<InitState> {
             deser,
             count: 0,
             errored: false,
-            _state: InitState {},
+            state: InitState { zxid },
         })
+    }
+
+    /// The transaction id for this snapshot
+    pub fn zxid(&self) -> Zxid {
+        self.state.zxid
     }
 
     /// Transition to session information
@@ -120,7 +147,7 @@ impl SnapshotFile<SessionsState> {
             deser: prev.deser,
             count,
             errored: false,
-            _state: SessionsState {},
+            state: SessionsState {},
         })
     }
 
@@ -163,7 +190,7 @@ impl SnapshotFile<ACLCacheState> {
             deser: prev.deser,
             count,
             errored: false,
-            _state: ACLCacheState {},
+            state: ACLCacheState {},
         })
     }
 
@@ -202,7 +229,7 @@ impl SnapshotFile<DataNodesState> {
             deser: prev.deser,
             count: 1,
             errored: false,
-            _state: DataNodesState {},
+            state: DataNodesState {},
         })
     }
 }
@@ -247,6 +274,9 @@ mod tests {
     #[test]
     fn read_snapshot() {
         let snap = SnapshotFile::new("data/version-2/snapshot.1000005d0").unwrap();
+        let zxid = snap.zxid();
+
+        println!("{:?}", zxid);
 
         let mut snap = snap.sessions().unwrap();
 
@@ -267,13 +297,20 @@ mod tests {
         let snap = snap.data_nodes().unwrap();
 
         // println!("data nodes:");
+        let mut max_zxid = Zxid(0);
+
         &snap.for_each(|x| {
             let (path, mut node) = x.unwrap();
             let len = node.data.len();
             node.data = Vec::new();
 
+            max_zxid = std::cmp::max(max_zxid, node.stat.czxid);
+            max_zxid = std::cmp::max(max_zxid, node.stat.mzxid);
+
             // println!("{} - {} bytes", path, len);
             //println!("{:?}", node);
         });
+
+        assert_eq!(zxid, max_zxid);
     }
 }

@@ -6,6 +6,7 @@ use serde::de::{self, DeserializeSeed, EnumAccess, IntoDeserializer, MapAccess, 
 use byteorder::{BigEndian, ReadBytesExt};
 
 use super::error::{Error, Result};
+use super::EnumEncoding;
 use super::MAX_LENGTH;
 
 use num_traits::ToPrimitive;
@@ -46,7 +47,7 @@ pub struct Deserializer<R> {
     reader: R,
 
     /// Struct enum type -> (enum variant discriminant -> enum variant name)
-    enum_mappings: HashMap<&'static str, HashMap<i32, &'static str>>,
+    enum_mappings: HashMap<&'static str, (HashMap<i32, &'static str>, EnumEncoding)>,
 }
 
 pub fn from_reader<R: Read>(reader: R) -> Deserializer<R> {
@@ -58,8 +59,15 @@ pub fn from_reader<R: Read>(reader: R) -> Deserializer<R> {
 
 impl<'de, R: Read> Deserializer<R> {
     /// Add a discriminant mapping for struct enum types.
-    pub fn add_enum_mapping<E: OpCodeEnum, T: NamedType>(&mut self) {
-        self.enum_mappings.insert(T::short_type_name(), E::codes_to_names());
+    pub fn add_enum_mapping<E: OpCodeEnum, T: NamedType>(&mut self, order: EnumEncoding) {
+        self.enum_mappings
+            .insert(T::short_type_name(), (E::codes_to_names(), order));
+    }
+
+    /// Add mappings for a field-less enum
+    pub fn add_enum<E: OpCodeEnum + NamedType>(&mut self) {
+        self.enum_mappings
+            .insert(E::short_type_name(), (E::codes_to_names(), EnumEncoding::Type));
     }
 }
 
@@ -221,10 +229,7 @@ impl<'de, 'a, R: Read> de::Deserializer<'de> for &'a mut Deserializer<R> {
                 .ok_or_else(|| Error::Message("Size value too large".to_owned()))?
         };
 
-        visitor.visit_map(JuteAccess {
-            size,
-            de: &mut self,
-        })
+        visitor.visit_map(JuteAccess { size, de: &mut self })
     }
 
     fn deserialize_struct<V: Visitor<'de>>(
@@ -313,13 +318,25 @@ impl<'a, 'de: 'a, R: Read> EnumAccess<'de> for JuteEnumAccess<'a, R> {
     where
         V: serde::de::DeserializeSeed<'de>,
     {
-        let mappings = self
+        let (mappings, order) = self
             .de
             .enum_mappings
             .get(self.enum_type)
             .ok_or_else(|| Error::Message(format!("Cannot find mapping for type {}", self.enum_type)))?;
 
-        let d = self.de.reader.read_i32::<BigEndian>()?;
+        let d = match order {
+            EnumEncoding::Type => self.de.reader.read_i32::<BigEndian>()?,
+            EnumEncoding::LengthThenType => {
+                self.de.reader.read_i32::<BigEndian>()?; // length, ignore
+                self.de.reader.read_i32::<BigEndian>()? // type
+            }
+            EnumEncoding::TypeThenLength => {
+                let typ = self.de.reader.read_i32::<BigEndian>()?;
+                self.de.reader.read_i32::<BigEndian>()?; // length, ignore
+                typ
+            }
+        };
+
         let idx = mappings
             .get(&d)
             .ok_or_else(|| Error::Message(format!("Wrong discriminant for {}: {}", self.enum_type, d)))?;
@@ -426,7 +443,7 @@ pub mod test {
         let mut bytes = data.as_slice();
 
         let mut deser = super::from_reader(&mut bytes);
-        deser.add_enum_mapping::<FooBarCode, FooBar>();
+        deser.add_enum_mapping::<FooBarCode, FooBar>(super::EnumEncoding::Type);
 
         let foobar = FooBar::deserialize(&mut deser).expect("fail");
         println!("FooBar = {:?}", foobar);
@@ -441,7 +458,7 @@ pub mod test {
         let mut bytes = data.as_slice();
 
         let mut deser = super::from_reader(&mut bytes);
-        deser.add_enum_mapping::<FooBarCode, FooBar>();
+        deser.add_enum_mapping::<FooBarCode, FooBar>(super::EnumEncoding::Type);
         let foobar = FooBar::deserialize(&mut deser).expect("fail");
         println!("FooBar = {:?}", foobar);
 

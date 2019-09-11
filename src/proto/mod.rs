@@ -8,40 +8,40 @@ use serde_derive::Serialize;
 // See https://github.com/apache/zookeeper/blob/trunk/src/zookeeper.jute
 
 /// ZooKeeper transaction id
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[derive(Serialize, Deserialize)]
 pub struct Zxid(pub i64);
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[derive(Serialize, Deserialize)]
 pub struct Timestamp(pub u64);
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[derive(Serialize, Deserialize)]
 pub struct Duration(pub i32);
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[derive(Serialize, Deserialize)]
 pub struct Version(pub i32);
 pub const ANY_VERSION: Version = Version(-1);
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[derive(Serialize, Deserialize)]
 pub struct OptionalVersion(pub i32);
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[derive(Serialize, Deserialize)]
 pub struct SessionId(pub i64);
 
 /// Exchange id, a correlation id sent by a request and returned in its response.
 /// It starts at 1, but can be negative for server-generated notifications (see
 /// `FinalRequestProcessor` in ZK server)
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[derive(Serialize, Deserialize)]
 pub struct Xid(pub i32);
 
 /// Permissions associated to an ACL
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[derive(Serialize, Deserialize)]
 pub struct Perms(u32);
 
