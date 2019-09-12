@@ -2,11 +2,12 @@ use serde::Deserialize;
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 
-use crate::proto::Duration;
-use crate::proto::SessionId;
-use crate::proto::StatPersisted;
-use crate::proto::Zxid;
-use crate::proto::ACL;
+use crate::Duration;
+use crate::SessionId;
+use crate::Zxid;
+use crate::ACL;
+use crate::Version;
+use crate::Timestamp;
 
 use failure::Error;
 use std::fs::File;
@@ -30,6 +31,36 @@ pub struct Session {
 pub struct ACLCacheEntry {
     pub entry_id: ACLRef,
     pub acl: Vec<ACL>,
+}
+
+/// Encodes the various kinds of ephemerality: ephemeral, container, TTL node
+/// See EphemeralType.java
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize)]
+pub struct EphemeralInfo(i64);
+
+/// Enhanced stats
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct StatPersisted {
+    /// created zxid
+    pub czxid: Zxid,
+    /// last modified zxid
+    pub mzxid: Zxid,
+    /// created
+    pub ctime: Timestamp,
+    /// last modified
+    pub mtime: Timestamp,
+    /// version
+    pub version: Version,
+    /// child version
+    pub cversion: Version,
+    /// acl version
+    pub aversion: Version,
+    /// ephemeral information
+    pub ephemeral_info: EphemeralInfo,
+    /// last modified children
+    pub pzxid: Zxid,
 }
 
 #[derive(Debug)]
@@ -280,34 +311,34 @@ mod tests {
 
         let mut snap = snap.sessions().unwrap();
 
-        // println!("sessions: {}", snap.count);
+        //println!("sessions: {}", snap.count);
         &snap.for_each(|x| {
-            let session = x.unwrap();
-            //println!("{:?}", session);
+            let _session = x.unwrap();
+            //println!("{:?}", _session);
         });
 
         let mut snap = snap.acls().unwrap();
 
-        // println!("acls: {}", snap.count);
+        //println!("acls: {}", snap.count);
         &snap.for_each(|x| {
-            let acl = x.unwrap();
-            //println!("{:?}", acl);
+            let _acl = x.unwrap();
+            //println!("{:?}", _acl);
         });
 
         let snap = snap.data_nodes().unwrap();
 
-        // println!("data nodes:");
+        //println!("data nodes:");
         let mut max_zxid = Zxid(0);
 
         &snap.for_each(|x| {
-            let (path, mut node) = x.unwrap();
-            let len = node.data.len();
+            let (_path, mut node) = x.unwrap();
+            let _len = node.data.len();
             node.data = Vec::new();
 
             max_zxid = std::cmp::max(max_zxid, node.stat.czxid);
             max_zxid = std::cmp::max(max_zxid, node.stat.mzxid);
 
-            // println!("{} - {} bytes", path, len);
+            //println!("{} - {} bytes", _path, _len);
             //println!("{:?}", node);
         });
 

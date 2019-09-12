@@ -1,208 +1,646 @@
-pub mod persistence;
-pub mod proto;
-pub mod txn;
-
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 
+use named_type::NamedType;
+use named_type_derive::NamedType;
+
+use super::CreateMode;
+use super::Duration;
+use super::OptionalVersion;
+use super::SessionId;
+use super::Stat;
+use super::Version;
+use super::Xid;
+use super::Zxid;
+use super::ACL;
+
+
 // See https://github.com/apache/zookeeper/blob/trunk/src/zookeeper.jute
 
-/// ZooKeeper transaction id
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(Serialize, Deserialize)]
-pub struct Zxid(pub i64);
+/// The `Request` trait holds the response type, so that we can implement strongly typed RPC
+pub trait Request {
+    type Response;
+}
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(Serialize, Deserialize)]
-pub struct Timestamp(pub u64);
+// See ZooDefs.java
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq)]
 #[derive(Serialize, Deserialize)]
-pub struct Duration(pub i32);
+#[derive(ToPrimitive)]
+#[derive(IntoStaticStr, EnumIter)]
+pub enum OpCode {
+    Notification = 0,
+    Create = 1,
+    Delete = 2,
+    Exists = 3,
+    GetData = 4,
+    SetData = 5,
+    GetACL = 6,
+    SetACL = 7,
+    GetChildren = 8,
+    Sync = 9,
+    // 10 not used
+    Ping = 11,
+    GetChildren2 = 12,
+    Check = 13,
+    Multi = 14,
+    Create2 = 15,
+    Reconfig = 16,
+    CheckWatches = 17,
+    RemoveWatches = 18,
+    CreateContainer = 19,
+    DeleteContainer = 20,
+    CreateTTL = 21,
+    Auth = 100,
+    SetWatches = 101,
+    Sasl = 102,
+    CreateSession = -10,
+    CloseSession = -11,
+    Error = -1,
+}
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, PartialOrd)]
 #[derive(Serialize, Deserialize)]
-pub struct Version(pub i32);
-pub const ANY_VERSION: Version = Version(-1);
+#[derive(ToPrimitive)]
+#[derive(IntoStaticStr, EnumIter)]
+#[derive(NamedType)]
+pub enum ErrorCode {
+    /// Everything is OK
+    Ok = 0,
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(Serialize, Deserialize)]
-pub struct OptionalVersion(pub i32);
+    /// System and server-side errors.
+    /// This is never thrown by the server, it shouldn't be used other than
+    /// to indicate a range. Specifically error codes greater than this
+    /// value, but lesser than `APIError`, are system errors.
+    SystemError = -1,
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(Serialize, Deserialize)]
-pub struct SessionId(pub i64);
+    /// A runtime inconsistency was found
+    RuntimeInconsistency = -2,
+    /// A data inconsistency was found
+    DataInconsistency = -3,
+    /// Connection to the server has been lost
+    ConnectionLoss = -4,
+    /// Error while marshalling or unmarshalling data
+    MarshallingError = -5,
+    /// Operation is unimplemented
+    Unimplemented = -6,
+    /// Operation timeout
+    OperationTimeout = -7,
+    /// Invalid arguments
+    BadArguments = -8,
+    /// No quorum of new config is connected and up-to-date with the leader of last commmitted config - try
+    /// invoking reconfiguration after new servers are connected and synced
+    NewConfigNoQuorum = -13,
+    /// Another reconfiguration is in progress -- concurrent reconfigs not supported (yet)
+    ReconfigInProgress = -14,
+    /// Unknown session (internal server use only)
+    UnknownSession = -12,
 
-/// Exchange id, a correlation id sent by a request and returned in its response.
-/// It starts at 1, but can be negative for server-generated notifications (see
-/// `FinalRequestProcessor` in ZK server)
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(Serialize, Deserialize)]
-pub struct Xid(pub i32);
+    /// API errors.
+    /// This is never thrown by the server, it shouldn't be used other than
+    /// to indicate a range. Specifically error codes greater than this
+    /// value are API errors (while values less than this indicate a `SystemError`).
+    APIError = -100,
 
-/// Permissions associated to an ACL
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[derive(Serialize, Deserialize)]
-pub struct Perms(u32);
+    /// Node does not exist
+    NoNode = -101,
+    /// Not authenticated
+    NoAuth = -102,
+    /// Version conflict
+    /// In case of reconfiguration: reconfig requested from config version X but last seen config
+    /// has a different version Y.
+    BadVersion = -103,
+    /// Ephemeral nodes may not have children
+    NoChildrenForEphemerals = -108,
+    /// The node already exists
+    NodeExists = -110,
+    /// The node has children
+    NotEmpty = -111,
+    /// The session has been expired by the server
+    SessionExpired = -112,
+    /// Invalid callback specified
+    InvalidCallback = -113,
+    /// Invalid ACL specified
+    InvalidACL = -114,
+    /// Client authentication failed
+    AuthFailed = -115,
+    /// Session moved to another server, so operation is ignored
+    SessionMoved = -118,
+    /// State-changing request is passed to read-only server
+    NotReadOnly = -119,
+    /// Attempt to create ephemeral node on a local session
+    EphemeralOnLocalSession = -120,
+    /// Attempts to remove a non-existing watcher
+    NoWatcher = -121,
+    /// Attempts to perform a reconfiguration operation when reconfiguration feature is disabled.
+    ReconfigDisabled = -123,
+}
 
-impl Perms {
-    /// Checks that `self` grants all permissions granted by `perm`.
-    pub fn has(&self, perm: Perms) -> bool {
-        (self.0 & perm.0) ^ perm.0 == 0
+impl ErrorCode {
+    pub fn is_system_error(&self) -> bool {
+        self < &ErrorCode::SystemError && self > &ErrorCode::APIError
+    }
+
+    pub fn is_api_error(&self) -> bool {
+        self < &ErrorCode::APIError
     }
 }
 
-impl std::ops::BitOr for Perms {
-    type Output = Self;
-    fn bitor(self, rhs: Self) -> Self::Output {
-        Perms(self.0 | rhs.0)
-    }
-}
 
-pub const PERM_READ: Perms = Perms(1);
-pub const PERM_WRITE: Perms = Perms(1 << 1);
-pub const PERM_CREATE: Perms = Perms(1 << 2);
-pub const PERM_DELETE: Perms = Perms(1 << 3);
-pub const PERM_ADMIN: Perms = Perms(1 << 4);
-pub const PERM_ALL: Perms = Perms(PERM_READ.0 | PERM_WRITE.0 | PERM_CREATE.0 | PERM_DELETE.0 | PERM_ADMIN.0);
-
-// See CreateMode.java
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]
-pub enum CreateMode {
-    Persistent = 0,
-    Ephemeral = 1,
-    PersistentSequential = 2,
-    EphemeralSequential = 3,
-    Container = 4,
-    PersistentWithTTL = 5,
-    PersistentSequentialWithTTL = 6,
+pub struct RequestHeader {
+    pub xid: Xid,
+    #[serde(rename = "type")]
+    pub typ: i32,
 }
-
-use CreateMode::*;
-impl CreateMode {
-    pub fn is_ephemeral(&self) -> bool {
-        match self {
-            Ephemeral | EphemeralSequential => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_sequential(&self) -> bool {
-        match self {
-            PersistentSequential | EphemeralSequential => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_container(&self) -> bool {
-        match self {
-            Container => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_ttl(&self) -> bool {
-        match self {
-            PersistentWithTTL | PersistentSequentialWithTTL => true,
-            _ => false,
-        }
-    }
-}
-
-//----- Data
 
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]
-pub struct Id {
+pub struct ReplyHeader {
+    pub xid: Xid,
+    pub zxid: Zxid,
+    pub err: i32,
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct MultiHeader {
+    #[serde(rename = "type")]
+    pub typ: i32,
+    pub done: bool,
+    pub err: i32,
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct ErrorResponse {
+    pub err: ErrorCode,
+}
+
+//---- Auth
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+// Note: sent with xid -4 (see ClientCnxn.java)
+pub struct AuthPacket {
+    #[serde(rename = "type")]
+    pub typ: i32,
     pub scheme: String,
-    pub id: String,
+    #[serde(with = "serde_bytes")]
+    pub buffer: Vec<u8>,
+}
+
+impl Request for AuthPacket {
+    type Response = ();
+}
+
+//---- Connect
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct ConnectRequest {
+    pub protocol_version: i32,
+    pub last_zxid_seen: Zxid,
+    pub time_out: Duration,
+    pub session_id: SessionId,
+    #[serde(with = "serde_bytes")]
+    pub passwd: Vec<u8>,
+}
+
+impl Request for ConnectRequest {
+    type Response = ConnectResponse;
 }
 
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]
-pub struct ACL {
-    pub perms: Perms,
-    pub id: Id,
+pub struct ConnectResponse {
+    pub protocol_version: i32,
+    pub time_out: Duration,
+    pub session_id: SessionId,
+    #[serde(with = "serde_bytes")]
+    pub passwd: Vec<u8>,
 }
 
-/// Information shared with the client
+//---- Create
+
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]
-pub struct Stat {
-    /// Created zxid
-    pub czxid: Zxid,
-    /// Last modified zxid
-    pub mzxid: Zxid,
-    /// Created time
-    pub ctime: Timestamp,
-    /// Last modified time
-    pub mtime: Timestamp,
-    /// Version
+pub struct CreateRequest {
+    pub path: String,
+    #[serde(with = "serde_bytes")]
+    pub data: Vec<u8>,
+    pub acl: Vec<ACL>,
+    pub flags: CreateMode,
+}
+
+impl Request for CreateRequest {
+    type Response = CreateResponse;
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct CreateResponse {
+    pub path: String,
+}
+
+//---- Create TTL
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+struct CreateTTLRequest {
+    pub path: String,
+    #[serde(with = "serde_bytes")]
+    pub data: Vec<u8>,
+    pub acl: Vec<ACL>,
+    pub flags: CreateMode,
+    pub ttl: Duration,
+}
+
+impl Request for CreateTTLRequest {
+    type Response = Create2Response;
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct Create2Response {
+    pub path: String,
+    pub stat: Stat,
+}
+
+//---- Set data
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct SetDataRequest {
+    pub path: String,
+    #[serde(with = "serde_bytes")]
+    pub data: Vec<u8>,
     pub version: Version,
-    /// Child version
-    pub cversion: Version,
-    /// ACL version
-    pub aversion: Version,
-    /// Owner id if ephemeral, 0 otherwise
-    pub ephemeral_owner: SessionId,
-    /// Length of the data in the node
-    pub data_length: i32,
-    /// Number of children of this node
-    pub num_children: i32,
-    /// Last modified children
-    pub pzxid: Zxid,
 }
 
-/// Information explicitly stored by the server persistently
+impl Request for SetDataRequest {
+    type Response = SetDataResponse;
+}
+
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]
-pub struct StatPersisted {
-    /// created zxid
-    pub czxid: Zxid,
-    /// last modified zxid
-    pub mzxid: Zxid,
-    /// created
-    pub ctime: Timestamp,
-    /// last modified
-    pub mtime: Timestamp,
-    /// version
-    pub version: Version,
-    /// child version
-    pub cversion: Version,
-    /// acl version
-    pub aversion: Version,
-    /// owner id if ephemeral, 0 otw
-    pub ephemeral_owner: SessionId,
-    /// last modified children
-    pub pzxid: Zxid,
+pub struct SetDataResponse {
+    pub stat: Stat,
 }
 
-#[cfg(test)]
-pub mod test {
+//---- Get Data
 
-    /// Test that the additional derives on enums behave as expected
-    #[test]
-    pub fn test_opcode_derives() {
-        use super::proto::OpCode;
-        use num_traits::cast::ToPrimitive;
-        use strum::IntoEnumIterator;
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct GetDataRequest {
+    pub path: String,
+    pub watch: bool,
+}
 
-        // Use CloseSession as its value is different from its position in the variants
+impl Request for GetDataRequest {
+    type Response = GetDataResponse;
+}
 
-        let x = OpCode::CloseSession;
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct GetDataResponse {
+    #[serde(with = "serde_bytes")]
+    pub data: Vec<u8>,
+    pub stat: Stat,
+}
 
-        // ToPrimitive
-        assert_eq!(x.to_i32(), Some(-11));
+//---- Delete
 
-        // IntoStaticStr
-        let x: &'static str = OpCode::Create.into();
-        assert_eq!(x, "Create");
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct DeleteRequest {
+    pub path: String,
+    pub version: OptionalVersion,
+}
 
-        // EnumIter
-        let v = OpCode::iter().collect::<Vec<_>>();
-        assert_eq!(&v[0..3], &[OpCode::Notification, OpCode::Create, OpCode::Delete]);
+impl Request for DeleteRequest {
+    type Response = ();
+}
 
-        let _v = OpCode::iter().map(|v| (v, 0)).collect::<Vec<_>>();
-    }
+//---- Get children
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct GetChildrenRequest {
+    pub path: String,
+    pub watch: bool,
+}
+
+impl Request for GetChildrenRequest {
+    type Response = GetChildrenResponse;
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct GetChildrenResponse {
+    /// Name of children (not the full path)
+    pub children: Vec<String>,
+}
+
+//---- Get children 2
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct GetChildren2Request {
+    pub path: String,
+    pub watch: bool,
+}
+
+impl Request for GetChildren2Request {
+    type Response = GetChildren2Response;
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct GetChildren2Response {
+    pub children: Vec<String>,
+    pub stat: Stat,
+}
+
+//---- Check version
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct CheckVersionRequest {
+    pub path: String,
+    pub version: Version,
+}
+
+impl Request for CheckVersionRequest {
+    type Response = ();
+}
+
+//---- Reconfig
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct ReconfigRequest {
+    pub joining_servers: String,
+    pub leaving_servers: String,
+    pub new_members: String,
+    pub cur_config_id: i64,
+}
+
+impl Request for ReconfigRequest {
+    type Response = GetDataResponse;
+}
+
+//---- Set SASL
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct SetSASLRequest {
+    #[serde(with = "serde_bytes")]
+    pub token: Vec<u8>,
+}
+
+impl Request for SetSASLRequest {
+    type Response = SetSASLResponse;
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct SetSASLResponse {
+    #[serde(with = "serde_bytes")]
+    pub token: Vec<u8>,
+}
+
+//---- Get SASL
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct GetSASLRequest {
+    #[serde(with = "serde_bytes")]
+    pub token: Vec<u8>,
+}
+
+impl Request for GetSASLRequest {
+    type Response = SetSASLResponse; // Same response type as SetSASL
+}
+
+//---- Get max children
+
+/// Exists in zookeeper.jute but doesn't seem to be used in the ZK server code base
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct GetMaxChildrenRequest {
+    pub path: String,
+}
+
+impl Request for GetMaxChildrenRequest {
+    type Response = GetMaxChildrenResponse;
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct GetMaxChildrenResponse {
+    pub max: i32,
+}
+
+//---- Set max children
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct SetMaxChildrenRequest {
+    pub path: String,
+    pub max: i32,
+}
+
+impl Request for SetMaxChildrenRequest {
+    type Response = ();
+}
+
+//---- Sync
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct SyncRequest {
+    pub path: String,
+}
+
+impl Request for SyncRequest {
+    type Response = SyncResponse;
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct SyncResponse {
+    pub path: String,
+}
+
+//---- Get ACL
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct GetACLRequest {
+    pub path: String,
+}
+
+impl Request for GetACLRequest {
+    type Response = GetACLResponse;
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct GetACLResponse {
+    pub acl: Vec<ACL>,
+    pub stat: Stat,
+}
+
+//---- Set ACL
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct SetACLRequest {
+    pub path: String,
+    pub acl: Vec<ACL>,
+    pub version: OptionalVersion,
+}
+
+impl Request for SetACLRequest {
+    type Response = SetACLResponse;
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct SetACLResponse {
+    pub stat: Stat,
+}
+
+//---- Exists
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct ExistsRequest {
+    pub path: String,
+    pub watch: bool,
+}
+
+impl Request for ExistsRequest {
+    type Response = ExistsResponse;
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct ExistsResponse {
+    pub stat: Stat,
+}
+
+
+//---- Watcher
+
+// See Watcher.java
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub enum WatcherEventType {
+    None = -1,
+    NodeCreated = 1,
+    NodeDeleted = 2,
+    NodeDataChanged = 3,
+    NodeChildrenChanged = 4,
+    DataWatchRemoved = 5,
+    ChildWatchRemoved = 6,
+}
+
+// See Watcher.java
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub enum KeeperState {
+    /// The client is in the disconnected state - it is not connected
+    /// to any server in the ensemble.
+    Disconnected = 0,
+
+    /// The client is in the connected state - it is connected
+    /// to a server in the ensemble (one of the servers specified
+    /// in the host connection parameter during ZooKeeper client
+    /// creation).
+    SyncConnected = 3,
+
+    /// Auth failed state
+    AuthFailed = 4,
+
+    /// The client is connected to a read-only server, that is the
+    /// server which is not currently connected to the majority.
+    /// The only operations allowed after receiving this state is
+    /// read operations.
+    /// This state is generated for read-only clients only since
+    /// read/write clients aren't allowed to connect to r/o servers.
+    ConnectedReadOnly = 5,
+
+    /// SaslAuthenticated: used to notify clients that they are SASL-authenticated,
+    /// so that they can perform Zookeeper actions with their SASL-authorized permissions.
+    SaslAuthenticated = 6,
+
+    /// The serving cluster has expired this session. The ZooKeeper
+    /// client connection (the session) is no longer valid. You must
+    /// create a new client connection (instantiate a new ZooKeeper
+    /// instance) if you with to access the ensemble. */
+    Expired = -112,
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct WatcherEvent {
+    #[serde(rename = "type")]
+    pub typ: WatcherEventType,
+    /// State of the Keeper client runtime
+    pub state: KeeperState,
+    pub path: String,
+}
+
+// See Watcher.java
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub enum WatcherType {
+    Children = 1,
+    Data = 2,
+    Any = 3,
+}
+
+//---- Set watches
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+// Note: sent with Xid(-8) (see ClientCnxn.java)
+pub struct SetWatches {
+    pub relative_zxid: Zxid,
+    pub data_watches: Vec<String>,
+    pub exist_watches: Vec<String>,
+    pub child_watches: Vec<String>,
+}
+
+impl Request for SetWatches {
+    type Response = ();
+}
+
+//---- Check watches
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct CheckWatchesRequest {
+    pub path: String,
+    #[serde(rename = "type")]
+    pub typ: WatcherType,
+}
+
+impl Request for CheckWatchesRequest {
+    type Response = ();
+}
+
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+pub struct RemoveWatchesRequest {
+    pub path: String,
+    #[serde(rename = "type")]
+    pub typ: WatcherType,
+}
+
+impl Request for RemoveWatchesRequest {
+    type Response = ();
 }

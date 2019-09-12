@@ -1,3 +1,5 @@
+//! Types and operations to read ZooKeeper snapshots and transaction logs.
+
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 
@@ -6,7 +8,7 @@ use std::path::Path;
 pub mod snapshot;
 pub mod txnlog;
 
-use super::Zxid;
+use crate::Zxid;
 
 #[derive(Debug)]
 #[derive(Deserialize, Serialize)]
@@ -17,7 +19,7 @@ pub struct FileHeader {
 }
 
 pub const TXNLOG_MAGIC: i32 = 0x5a4b_4c47; // "ZKLG"
-pub const SNAP_MAGIC: i32 = 0x5a4b_534e; // ZKSN
+pub const SNAP_MAGIC: i32 = 0x5a4b_534e; // "ZKSN"
 
 pub fn zxid_from_path(path: impl AsRef<Path>) -> Option<Zxid> {
     let path = path.as_ref();
