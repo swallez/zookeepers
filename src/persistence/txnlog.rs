@@ -15,8 +15,6 @@ use std::iter::Iterator;
 use std::path::Path;
 use std::path::PathBuf;
 
-use itertools::Itertools;
-
 /// Transaction header.
 ///
 /// Compared to `ZooKeeper.jute` it doesn't contain the operation type, which is handled in a
@@ -186,14 +184,10 @@ impl TxnlogFile {
         let paths = Self::find_txnlog_paths(dir, snapshot_zxid)?;
 
         // Open all txnfiles, failing if one can't be opened
-        let files =
-            paths
-                .into_iter()
-                .map(|path| TxnlogFile::new(path))
-                .fold_results(Vec::new(), |mut vec, txnlog| {
-                    vec.push(txnlog);
-                    vec
-                })?;
+        let files: Vec<_> = paths
+            .into_iter()
+            .map(|path| TxnlogFile::new(path))
+            .collect::<Result<_, _>>()?;
 
         // Flatmap all files, keeping only transactions >= snapshot_zxid
         let txns = files.into_iter().flat_map(|v| v).filter(move |r| match r {
@@ -301,15 +295,28 @@ impl Iterator for TxnlogFile {
 mod tests {
     use super::*;
     use crate::persistence::zxid_from_path;
+    use super::TxnOperation::*;
 
     #[test]
     fn read_tnxlog() {
-        let tnxlog = TxnlogFile::new("data/version-2/log.200000001").unwrap();
-        //let tnxlog = TxnlogFile::new("data/version-2/log.100000001").unwrap();
+        //let tnxlog = TxnlogFile::new("data/version-2/log.200000001").unwrap();
+        let tnxlog = TxnlogFile::new("data/version-2/log.100000001").unwrap();
 
         let mut count = 0;
         tnxlog.for_each(|x| {
             let _txn = x.unwrap();
+
+            let acl = match &_txn {
+                Txn { header: _, op: Create(c) } => Some(&c.acl),
+                Txn { header: _, op: Create2(c) } => Some(&c.acl),
+                Txn { header: _, op: CreateContainer(c) } => Some(&c.acl),
+                _ => None
+            };
+
+            if let Some(acl) = acl {
+                println!("{:?}", acl);
+            }
+
             //println!("{:?}", _txn);
             count += 1;
         });

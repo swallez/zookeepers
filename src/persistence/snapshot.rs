@@ -15,7 +15,9 @@ use std::io::BufReader;
 use std::iter::Iterator;
 use std::path::Path;
 
-#[derive(Debug)]
+use std::collections::HashMap;
+
+#[derive(Debug, PartialEq, Eq, Hash)]
 #[derive(Deserialize, Serialize)]
 pub struct ACLRef(i64);
 
@@ -194,6 +196,11 @@ impl SnapshotFile<SessionsState> {
 
         SnapshotFile::<ACLCacheState>::new_acl_cache(self)
     }
+
+    /// Reads all ACL cache entries, return them as a map and transition to data nodes
+    pub fn acl_map(self) -> Result<(HashMap<ACLRef, Vec<ACL>>, SnapshotFile<DataNodesState>), Error> {
+        self.acls()?.read_acl_map()
+    }
 }
 
 /// Iterate on the sessions contained in this snapshot
@@ -223,6 +230,15 @@ impl SnapshotFile<ACLCacheState> {
             errored: false,
             state: ACLCacheState {},
         })
+    }
+
+    fn read_acl_map(mut self) -> Result<(HashMap<ACLRef, Vec<ACL>>, SnapshotFile<DataNodesState>), Error> {
+
+        let all_acls: HashMap<_, _> = self
+            .map(|r| r.map(|entry| (entry.entry_id, entry.acl)))
+            .collect::<Result<_,_>>()?; // iter<result> -> result<iter> conversion
+
+        Ok((all_acls, self.data_nodes()?))
     }
 
     /// Transition to data nodes. It will skip any ACL cache entries that have not been read yet.
@@ -344,4 +360,42 @@ mod tests {
 
         assert_eq!(zxid, max_zxid);
     }
+
+    #[test]
+    fn dump_acl() {
+        let snap = SnapshotFile::new("data/version-2/snapshot.1000005d0").unwrap();
+        let zxid = snap.zxid();
+
+        println!("{:?}", zxid);
+
+        let mut snap = snap.sessions().unwrap();
+
+        //println!("sessions: {}", snap.count);
+        &snap.for_each(|x| {
+            let _session = x.unwrap();
+            //println!("{:?}", _session);
+        });
+
+        let (acls, snap) = snap.acl_map().unwrap();
+
+        let mut max_zxid = Zxid(0);
+
+        &snap.for_each(|x| {
+            let (_path, mut node) = x.unwrap();
+            let _len = node.data.len();
+            node.data = Vec::new();
+
+            max_zxid = std::cmp::max(max_zxid, node.stat.czxid);
+            max_zxid = std::cmp::max(max_zxid, node.stat.mzxid);
+
+            //println!("{} - {} bytes", _path, _len);
+            //println!("{:?}", node);
+            println!("{:?} {:?}", _path, acls.get(&node.acl).unwrap());
+        });
+
+        assert_eq!(zxid, max_zxid);
+
+        assert!(false);
+    }
+
 }
